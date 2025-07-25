@@ -692,12 +692,31 @@ class LuxAIS3Env(environment.Environment):
             energy_nodes=new_energy_nodes,
         )
 
-        # Compute relic scores
         def team_relic_score(unit_counts_map):
-            # not all relic nodes are spawned in yet, but relic nodes map ids are precomputed for all to be spawned relic nodes
-            # for efficiency. So we check if the relic node (by id) is spawned in yet. relic nodes mask is always increasing so we can do a simple trick below
-            scores = (unit_counts_map > 0) & (state.relic_nodes_map_weights <= state.relic_nodes_mask.sum() // 2) & (state.relic_nodes_map_weights > 0)
+            # Force everything to match the dtype of relic_nodes_map_weights
+            target_dtype = state.relic_nodes_map_weights.dtype
+            half_mask_sum = state.relic_nodes_mask.sum().astype(target_dtype)
+            unit_counts_map = unit_counts_map.astype(target_dtype)
+
+            scores = (
+                    (unit_counts_map > 0)
+                    & (state.relic_nodes_map_weights <= half_mask_sum)
+                    & (state.relic_nodes_map_weights > 0)
+            )
             return jnp.sum(scores, dtype=jnp.int32)
+
+        # # Compute relic scores
+        # def team_relic_score(unit_counts_map):
+        #     # not all relic nodes are spawned in yet, but relic nodes map ids are precomputed for all to be spawned relic nodes
+        #     # for efficiency. So we check if the relic node (by id) is spawned in yet. relic nodes mask is always increasing so we can do a simple trick below
+        #     half_mask_sum = state.relic_nodes_mask.sum().astype(state.relic_nodes_map_weights.dtype)
+        #     scores = (
+        #             (unit_counts_map > 0)
+        #             & (state.relic_nodes_map_weights <= half_mask_sum)
+        #             & (state.relic_nodes_map_weights > 0)
+        #     )
+        #     # scores = (unit_counts_map > 0) & (state.relic_nodes_map_weights <= state.relic_nodes_mask.sum() // 2) & (state.relic_nodes_map_weights > 0)
+        #     return jnp.sum(scores, dtype=jnp.int32)
 
         # note we need to recompue unit counts since units can get removed due to collisions
         team_scores = jax.vmap(team_relic_score)(
